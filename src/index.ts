@@ -3,6 +3,7 @@ import { kebabCase } from 'lodash';
 import * as fs from 'fs';
 import * as colors from 'colors';
 import * as yosay from 'yosay';
+import * as dargs from 'dargs';
 
 import Utils from './scripts/utils';
 import { npmDependencies, presetDependencies } from './scripts/install';
@@ -37,6 +38,13 @@ module.exports = class extends Generator {
     this.config.set('app.name', this.appname);
     this.config.set('sppp.version', this.data.sppp.version);
     this.config.save();
+
+    this.option('package-manager', {
+      description: 'preferred package manager (npm, yarn, pnpm)',
+      type: String,
+      alias: 'pm',
+      default: 'npm'
+    });
 
     // Check for existing project
     (() => {
@@ -171,16 +179,29 @@ module.exports = class extends Generator {
       let depOptions: any = null;
       let devDepOptions: any = null;
 
-      next && await this.utils.execPromise('yarn --version').then(_ => {
-        installer = this.yarnInstall.bind(this);
-        depOptions = { 'save': true };
-        devDepOptions = { 'dev': true };
-        next = false;
-      }).catch(_ => next = true);
+      depOptions = { 'save': true };
+
+      if (this.options['package-manager'] === 'pnpm') {
+        next && await this.utils.execPromise('pnpm --version').then(_ => {
+          installer = (dep: string[], opt) => {
+            const args = ['install'].concat(dep).concat(dargs(opt));
+            this.spawnCommandSync('pnpm', args);
+          };
+          devDepOptions = { 'save-dev': true };
+          next = false;
+        }).catch(_ => next = true);
+      }
+
+      if (this.options['package-manager'] === 'yarn') {
+        next && await this.utils.execPromise('yarn --version').then(_ => {
+          installer = this.yarnInstall.bind(this);
+          devDepOptions = { 'dev': true };
+          next = false;
+        }).catch(_ => next = true);
+      }
 
       next && (() => {
         installer = this.npmInstall.bind(this);
-        depOptions = { 'save': true };
         devDepOptions = { 'save-dev': true };
       })();
 
